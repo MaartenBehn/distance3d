@@ -292,24 +292,18 @@ def query_overlap(test_aabb, root_node_index, nodes, aabbs, break_at_first_leaf=
     overlaps = []
     stack = [root_node_index]
 
-    while len(stack) != 0:
+    while len(stack) != 0 and not (break_at_first_leaf and len(overlaps) > 0) and stack[-1] != INDEX_NONE:
 
         node_index = stack[-1]
         stack = stack[:-1]
-
-        if node_index == INDEX_NONE:
-            continue
+        empty = [np.int(x) for x in range(0)]
 
         node_aabb = aabbs[node_index]
-        if _aabb_overlap(node_aabb, test_aabb):
+        overlap = _aabb_overlap(node_aabb, test_aabb)
+        do_overlap_extend = overlap and nodes[node_index, TYPE_INDEX] == TYPE_LEAF
 
-            if nodes[node_index, TYPE_INDEX] == TYPE_LEAF:
-                overlaps.extend([node_index])
-
-                if break_at_first_leaf:
-                    break
-            else:
-                stack.extend([nodes[node_index, 1], nodes[node_index, 2]])
+        overlaps.extend([node_index] if do_overlap_extend else empty)
+        stack.extend([nodes[node_index, 1], nodes[node_index, 2]] if not do_overlap_extend and overlap else empty)
 
     return np.array(overlaps)
 
