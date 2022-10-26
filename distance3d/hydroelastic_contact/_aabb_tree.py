@@ -266,9 +266,6 @@ def query_overlap_of_other_tree(root1, nodes1, aabbs1, root2, nodes2, aabbs2):
         node_index = stack[-1]
         stack = stack[:-1]
 
-        if node_index == INDEX_NONE:
-            continue
-
         node_aabb = aabbs2[node_index]
         if nodes2[node_index, TYPE_INDEX] == TYPE_BRANCH and \
                 len(query_overlap(node_aabb, root1, nodes1, aabbs1, break_at_first_leaf=True)) >= 1:
