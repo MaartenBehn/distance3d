@@ -240,11 +240,11 @@ def t_b(triangle, a_index, b_index, a, b, ab):
 
 
 @numba.njit(
-    numba.types.Tuple((numba.float64[::1], numba.int64, numba.bool_))(
-        numba.float64[:, :, ::1]
+    numba.types.Tuple((numba.int64, numba.bool_))(
+        numba.float64[:, :, ::1], numba.float64[::1]
     ),
     cache=True)
-def project_triangle_origin(triangle):
+def project_triangle_origin(triangle, ray):
     # A is the last point we added.
     a_index = 2
     b_index = 1
@@ -264,18 +264,20 @@ def project_triangle_origin(triangle):
 
         towards_c = ac.dot(-a)
         if towards_c >= 0:
-            ray, simplex_len = origin_to_segment(triangle, a_index, c_index, a, c, ac, towards_c)
+            ray[:], simplex_len = origin_to_segment(triangle, a_index, c_index, a, c, ac, towards_c)
         else:
-            ray, simplex_len = t_b(triangle, a_index, b_index, a, b, ab)
+            ray[:], simplex_len = t_b(triangle, a_index, b_index, a, b, ab)
     else:
 
         edge_ab2o = np.cross(ab, abc).dot(-a)
         if edge_ab2o >= 0:
-            ray, simplex_len = t_b(triangle, a_index, b_index, a, b, ab)
+            ray[:], simplex_len = t_b(triangle, a_index, b_index, a, b, ab)
         else:
-            return origin_to_triangle(triangle, a_index, b_index, c_index, abc, abc.dot(-a))
+            result = origin_to_triangle(triangle, a_index, b_index, c_index, abc, abc.dot(-a))
+            ray[:] = result[0]
+            return result[1:]
 
-    return ray, simplex_len, False
+    return simplex_len, False
 
 
 @numba.njit(
@@ -581,7 +583,7 @@ def iteration(alpha, distance, inflation, inside, k, ray, ray_dir, ray_len,
     elif simplex_len == 2:
         simplex_len, inside = project_line_origin(simplex, ray)
     elif simplex_len == 3:
-        ray[:], simplex_len, inside = project_triangle_origin(simplex)
+        simplex_len, inside = project_triangle_origin(simplex, ray)
     elif simplex_len == 4:
         ray[:], simplex_len, inside = project_tetra_to_origin(simplex)
 
