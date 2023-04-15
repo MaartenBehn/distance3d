@@ -122,7 +122,7 @@ def gjk_nesterov_accelerated(collider1, collider2, ray_guess=None, max_interatio
         s0 = collider1.support_function(-ray_dir)
         s1 = collider2.support_function(ray_dir)
 
-        distance, inside, ray, ray_len, simplex_len, use_nesterov_acceleration, support_point, converged = iteration(
+        distance, inside, ray_len, simplex_len, use_nesterov_acceleration, converged = iteration(
             alpha, distance, inflation, inside, k, ray, ray_dir, ray_len,
             simplex, simplex_len, tolerance, upper_bound,
             use_nesterov_acceleration, s0, s1)
@@ -155,7 +155,7 @@ def nesterov_direction(k, normalize_support_direction, ray, ray_dir, support_poi
     cache=True)
 def origin_to_point(simplex, a_index, a):
     simplex[0] = simplex[a_index]
-    return np.copy(a), 1
+    return a, 1
 
 
 @numba.njit(
@@ -194,11 +194,11 @@ def origin_to_triangle(simplex, a_index, b_index, c_index, abc, abc_dot_a0):
 
 
 @numba.njit(
-    numba.types.Tuple((numba.float64[::1], numba.int64, numba.bool_))(
-        numba.float64[:, :, ::1]
+    numba.types.Tuple((numba.int64, numba.bool_))(
+        numba.float64[:, :, ::1], numba.float64[::1]
     ),
     cache=True)
-def project_line_origin(line):
+def project_line_origin(line, ray):
     # A is the last point we added.
     a_index = 1
     b_index = 0
@@ -215,14 +215,14 @@ def project_line_origin(line):
         #    function did not do any progress and GJK should have stopped.
         #  - A == origin
         # In any case, A is the closest to the origin
-        ray, simplex_len = origin_to_point(line, a_index, a)
-        return ray, simplex_len, np.all(a == 0.0)
+        ray[:], simplex_len = origin_to_point(line, a_index, a)
+        return simplex_len, np.all(a == 0.0)
     if d < 0:
-        ray, simplex_len = origin_to_point(line, a_index, a)
+        ray[:], simplex_len = origin_to_point(line, a_index, a)
     else:
-        ray, simplex_len = origin_to_segment(line, a_index, b_index, a, b, ab, d)
+        ray[:], simplex_len = origin_to_segment(line, a_index, b_index, a, b, ab, d)
 
-    return ray, simplex_len, False
+    return simplex_len, False
 
 
 @numba.njit(
@@ -532,7 +532,7 @@ def project_tetra_to_origin(tetra):
 
 @numba.njit(
     numba.types.Tuple((
-            numba.float64, numba.bool_, numba.float64[::1], numba.float64,
+            numba.float64, numba.bool_, numba.float64,
             numba.int64, numba.bool_, numba.bool_))(
         numba.float64, numba.float64, numba.float64, numba.bool_, numba.int64,
         numba.float64[::1], numba.float64[::1], numba.float64,
@@ -553,14 +553,14 @@ def iteration(alpha, distance, inflation, inside, k, ray, ray_dir, ray_len,
     if omega > upper_bound:
         distance = omega - inflation
         inside = False
-        return distance, inside, ray, ray_len, simplex_len, use_nesterov_acceleration, support_point, True
+        return distance, inside, ray_len, simplex_len, use_nesterov_acceleration, True
 
     if use_nesterov_acceleration:
         frank_wolfe_duality_gap = 2 * ray.dot(ray - support_point[0])
         if frank_wolfe_duality_gap - tolerance <= 0:
             use_nesterov_acceleration = False
             simplex_len -= 1
-            return distance, inside, ray, ray_len, simplex_len, use_nesterov_acceleration, support_point, False
+            return distance, inside, ray_len, simplex_len, use_nesterov_acceleration, False
 
     cv_check_passed = check_convergence(alpha, omega, ray_len, tolerance)
     if k > 0 and cv_check_passed:
@@ -568,30 +568,30 @@ def iteration(alpha, distance, inflation, inside, k, ray, ray_dir, ray_len,
             simplex_len -= 1
         if use_nesterov_acceleration:
             use_nesterov_acceleration = False
-            return distance, inside, ray, ray_len, simplex_len, use_nesterov_acceleration, support_point, False
+            return distance, inside, ray_len, simplex_len, use_nesterov_acceleration, False
         distance = ray_len - inflation
 
         if distance < tolerance:
             inside = True
-        return distance, inside, ray, ray_len, simplex_len, use_nesterov_acceleration, support_point, True
+        return distance, inside, ray_len, simplex_len, use_nesterov_acceleration, True
 
     assert 1 <= simplex_len <= 4
     if simplex_len == 1:
-        ray = np.copy(support_point[0])
+        ray[:] = support_point[0]
     elif simplex_len == 2:
-        ray, simplex_len, inside = project_line_origin(simplex)
+        simplex_len, inside = project_line_origin(simplex, ray)
     elif simplex_len == 3:
-        ray, simplex_len, inside = project_triangle_origin(simplex)
+        ray[:], simplex_len, inside = project_triangle_origin(simplex)
     elif simplex_len == 4:
-        ray, simplex_len, inside = project_tetra_to_origin(simplex)
+        ray[:], simplex_len, inside = project_tetra_to_origin(simplex)
 
     if not inside:
         ray_len = np.linalg.norm(ray)
     if inside or ray_len == 0:
         distance = -inflation
         inside = True
-        return distance, inside, ray, ray_len, simplex_len, use_nesterov_acceleration, support_point, True
+        return distance, inside, ray_len, simplex_len, use_nesterov_acceleration, True
 
-    return distance, inside, ray, ray_len, simplex_len, use_nesterov_acceleration, support_point, False
+    return distance, inside, ray_len, simplex_len, use_nesterov_acceleration, False
 
 
